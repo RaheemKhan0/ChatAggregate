@@ -36,9 +36,7 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
 
   const { refresh: refreshConversations } = useConversationsContext();
   const messagesScrollRef = useRef<HTMLDivElement>(null);
-  const graphScrollRef = useRef<HTMLDivElement | null>(null);
   const wasStreaming = useRef(false);
-  const isSyncingScroll = useRef(false);
 
   useEffect(() => {
     if (conversationId) {
@@ -60,21 +58,6 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
         messagesScrollRef.current.scrollHeight;
     }
   }, [messages, streamingContent]);
-
-  // Scroll sync: right pane → left pane
-  const handleMessagesScroll = useCallback(() => {
-    if (isSyncingScroll.current || !messagesScrollRef.current || !graphScrollRef.current) return;
-    isSyncingScroll.current = true;
-
-    const container = messagesScrollRef.current;
-    const scrollRatio = container.scrollTop / (container.scrollHeight - container.clientHeight || 1);
-    const graphPane = graphScrollRef.current;
-    graphPane.scrollTop = scrollRatio * (graphPane.scrollHeight - graphPane.clientHeight);
-
-    requestAnimationFrame(() => {
-      isSyncingScroll.current = false;
-    });
-  }, []);
 
   // Click node in graph → scroll right pane to that message
   const handleNodeClick = useCallback((messageId: string) => {
@@ -105,7 +88,6 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
       <div
         ref={messagesScrollRef}
         className="flex-1 overflow-y-auto p-4"
-        onScroll={handleMessagesScroll}
       >
         <div className="max-w-3xl mx-auto">
           {messages.length === 0 && !isStreaming && (
@@ -147,7 +129,6 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
     </div>
   );
 
-  // If no messages yet, just show the right pane without the graph
   if (!hasMessages) {
     return rightPane;
   }
@@ -163,7 +144,6 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
           onSelectBranch={selectBranch}
           onCreateBranch={createBranch}
           onNodeClick={handleNodeClick}
-          scrollRef={graphScrollRef}
         />
       }
       right={rightPane}
