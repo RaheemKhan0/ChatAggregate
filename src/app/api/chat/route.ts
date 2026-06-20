@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const { conversationId, parentMessageId, message, model } = await req.json();
+  const { conversationId, parentMessageId, message, model, projectId } = await req.json();
 
   if (!message || !model) {
     return new Response("Missing message or model", { status: 400 });
@@ -47,6 +47,7 @@ export async function POST(req: Request) {
         userId: session.user.id,
         model,
         title: message.slice(0, 50) + (message.length > 50 ? "..." : ""),
+        projectId: projectId || null,
       },
     });
     convId = conversation.id;
@@ -90,6 +91,35 @@ export async function POST(req: Request) {
     role: m.role as LLMMessage["role"],
     content: m.content,
   }));
+
+  // Inject project context if conversation belongs to a project
+  const conversation = await db.conversation.findUnique({
+    where: { id: convId },
+    select: { projectId: true },
+  });
+
+  if (conversation?.projectId) {
+    const project = await db.project.findUnique({
+      where: { id: conversation.projectId },
+      include: { files: { select: { name: true, content: true } } },
+    });
+
+    if (project) {
+      const contextParts: string[] = [];
+      if (project.notes) contextParts.push(`Project Notes:\n${project.notes}`);
+      for (const file of project.files) {
+        contextParts.push(`File: ${file.name}\n${file.content}`);
+      }
+
+      if (contextParts.length > 0) {
+        llmMessages.unshift({
+          role: "system",
+          content: `Project Context for "${project.name}":\n\n${contextParts.join("\n\n---\n\n")}`,
+        });
+        console.log(`[Chat API] Injected project context: "${project.name}" (${contextParts.length} resources)`);
+      }
+    }
+  }
 
   // Log the request
   console.log(`[Chat API] Provider: ${providerId} | Model: ${modelId} | User: ${session.user.email} | Messages: ${llmMessages.length} | Conversation: ${convId}`);

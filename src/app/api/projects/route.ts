@@ -8,19 +8,13 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const conversations = await db.conversation.findMany({
+  const projects = await db.project.findMany({
     where: { userId: session.user.id },
     orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      title: true,
-      model: true,
-      projectId: true,
-      updatedAt: true,
-    },
+    include: { _count: { select: { conversations: true } } },
   });
 
-  return NextResponse.json(conversations);
+  return NextResponse.json(projects);
 }
 
 export async function POST(req: Request) {
@@ -29,16 +23,20 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { model, title, projectId } = await req.json();
+  const { name, description } = await req.json();
 
-  const conversation = await db.conversation.create({
+  if (!name?.trim()) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 });
+  }
+
+  const project = await db.project.create({
     data: {
+      name: name.trim(),
+      description: description?.trim() || null,
       userId: session.user.id,
-      model: model || "anthropic/claude-sonnet-4-20250514",
-      title: title || "New Chat",
-      projectId: projectId || null,
     },
+    include: { _count: { select: { conversations: true } } },
   });
 
-  return NextResponse.json(conversation);
+  return NextResponse.json(project);
 }
