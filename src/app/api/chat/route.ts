@@ -91,6 +91,10 @@ export async function POST(req: Request) {
     content: m.content,
   }));
 
+  // Log the request
+  console.log(`[Chat API] Provider: ${providerId} | Model: ${modelId} | User: ${session.user.email} | Messages: ${llmMessages.length} | Conversation: ${convId}`);
+  console.log(`[Chat API] Last message: "${message.slice(0, 100)}${message.length > 100 ? "..." : ""}"`);
+
   // Stream response
   const encoder = new TextEncoder();
 
