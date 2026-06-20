@@ -8,7 +8,7 @@ import {
   getLeafOfBranch,
 } from "@/lib/tree";
 
-export function useChat(initialConversationId?: string) {
+export function useChat(initialConversationId?: string, projectId?: string) {
   const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
   const [activePath, setActivePath] = useState<ChatMessage[]>([]);
   const [activeLeafId, setActiveLeafId] = useState<string | null>(null);
@@ -93,6 +93,7 @@ export function useChat(initialConversationId?: string) {
             parentMessageId: parentId,
             message: content,
             model: selectedModel,
+            projectId,
           }),
           signal: abortRef.current.signal,
         });

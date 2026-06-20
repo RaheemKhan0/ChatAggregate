@@ -21,5 +21,7 @@ export const config = {
     "/api/chat/:path*",
     "/api/conversations/:path*",
     "/api/keys/:path*",
+    "/api/projects/:path*",
+    "/project/:path*",
   ],
 };
