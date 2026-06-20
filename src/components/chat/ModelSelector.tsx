@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { useModels } from "@/hooks/useModels";
 
 const providerLabels: Record<string, string> = {
@@ -15,7 +16,17 @@ interface ModelSelectorProps {
 }
 
 export function ModelSelector({ value, onChange, disabled }: ModelSelectorProps) {
-  const { grouped, loading } = useModels();
+  const { models, grouped, loading } = useModels();
+
+  // The default selectedModel can name a provider the user has no key for;
+  // snap to the first model actually available once the list loads.
+  useEffect(() => {
+    if (loading || models.length === 0) return;
+    const isValid = models.some((m) => `${m.providerId}/${m.id}` === value);
+    if (!isValid) {
+      onChange(`${models[0].providerId}/${models[0].id}`);
+    }
+  }, [loading, models, value, onChange]);
 
   return (
     <select

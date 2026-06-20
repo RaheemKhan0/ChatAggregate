@@ -19,8 +19,6 @@ export interface LLMProvider {
     maxTokens?: number;
     temperature?: number;
   }): AsyncIterable<LLMStreamEvent>;
-
-  listModels(): ModelInfo[];
 }
 
 export interface ModelInfo {

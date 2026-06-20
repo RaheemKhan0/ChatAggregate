@@ -1,14 +1,23 @@
 "use client";
 
 import { useState, useRef, useCallback } from "react";
+import { ModelSelector } from "./ModelSelector";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
   onStop: () => void;
   isStreaming: boolean;
+  selectedModel: string;
+  onModelChange: (model: string) => void;
 }
 
-export function ChatInput({ onSend, onStop, isStreaming }: ChatInputProps) {
+export function ChatInput({
+  onSend,
+  onStop,
+  isStreaming,
+  selectedModel,
+  onModelChange,
+}: ChatInputProps) {
   const [input, setInput] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -39,6 +48,11 @@ export function ChatInput({ onSend, onStop, isStreaming }: ChatInputProps) {
   return (
     <div className="border-t border-zinc-800 p-4">
       <div className="flex items-end gap-2 max-w-3xl mx-auto">
+        <ModelSelector
+          value={selectedModel}
+          onChange={onModelChange}
+          disabled={isStreaming}
+        />
         <textarea
           ref={textareaRef}
           value={input}

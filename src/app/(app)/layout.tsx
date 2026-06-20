@@ -2,11 +2,13 @@
 
 import { useState } from "react";
 import { Sidebar } from "@/components/sidebar/Sidebar";
+import { ConversationsProvider } from "@/contexts/ConversationsContext";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   return (
+    <ConversationsProvider>
     <div className="flex h-screen overflow-hidden">
       <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
@@ -27,5 +29,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {children}
       </main>
     </div>
+    </ConversationsProvider>
   );
 }

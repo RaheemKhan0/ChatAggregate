@@ -49,24 +49,24 @@ export class GeminiProvider implements LLMProvider {
     yield { type: "done" };
   }
 
-  listModels(): ModelInfo[] {
+  static listModels(): ModelInfo[] {
     return [
       {
-        id: "gemini-2.0-flash",
-        name: "Gemini 2.0 Flash",
-        providerId: this.providerId,
+        id: "gemini-2.5-pro",
+        name: "Gemini 2.5 Pro",
+        providerId: "gemini",
         contextWindow: 1048576,
       },
       {
-        id: "gemini-2.0-pro",
-        name: "Gemini 2.0 Pro",
-        providerId: this.providerId,
+        id: "gemini-2.5-flash",
+        name: "Gemini 2.5 Flash",
+        providerId: "gemini",
         contextWindow: 1048576,
       },
       {
-        id: "gemini-1.5-flash",
-        name: "Gemini 1.5 Flash",
-        providerId: this.providerId,
+        id: "gemini-2.5-flash-lite",
+        name: "Gemini 2.5 Flash-Lite",
+        providerId: "gemini",
         contextWindow: 1048576,
       },
     ];
