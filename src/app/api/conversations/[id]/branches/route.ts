@@ -67,12 +67,23 @@ export async function POST(
   }
 
   // Check for duplicate name
-  const existing = await db.branch.findUnique({
+  const existingName = await db.branch.findUnique({
     where: { conversationId_name: { conversationId: id, name } },
   });
-  if (existing) {
+  if (existingName) {
     return NextResponse.json(
       { error: "Branch name already exists" },
+      { status: 409 }
+    );
+  }
+
+  // Check if this message already has a branch
+  const existingMessage = await db.branch.findFirst({
+    where: { conversationId: id, leafMessageId },
+  });
+  if (existingMessage) {
+    return NextResponse.json(
+      { error: "This message already has a branch" },
       { status: 409 }
     );
   }

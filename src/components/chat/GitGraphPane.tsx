@@ -21,6 +21,18 @@ import { ReactFlowProvider } from "@xyflow/react";
 import dagre from "dagre";
 import type { ChatMessage, Branch } from "@/types";
 
+// --- Deterministic color from string ---
+
+function stringToColor(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    hash |= 0;
+  }
+  const h = ((hash % 360) + 360) % 360;
+  return `hsl(${h}, 70%, 60%)`;
+}
+
 // --- Types & Constants ---
 
 interface GitGraphPaneProps {
@@ -42,6 +54,8 @@ interface MessageNodeData {
   model?: string | null;
   createdAt: string;
   isActive: boolean;
+  hasBranch: boolean;
+  branchColor: string | null;
   branches: Branch[];
   activeLeafId: string | null;
   onSelectBranch: (branch: Branch) => void;
@@ -72,22 +86,16 @@ function AnimatedEdge({
     borderRadius: 12,
   });
 
-  const isActive = (data as { isActive?: boolean })?.isActive ?? false;
+  const edgeData = data as { isActive?: boolean; color?: string } | undefined;
+  const isActive = edgeData?.isActive ?? false;
+  const color = edgeData?.color ?? "#3b82f6";
 
   return (
     <>
-      <BaseEdge
-        id={id}
-        path={edgePath}
-        style={style}
-      />
+      <BaseEdge id={id} path={edgePath} style={style} />
       {isActive && (
-        <circle r={4} fill="#3b82f6" filter="drop-shadow(0 0 4px #3b82f6)">
-          <animateMotion
-            dur="2s"
-            repeatCount="indefinite"
-            path={edgePath}
-          />
+        <circle r={4} fill={color} filter={`drop-shadow(0 0 4px ${color})`}>
+          <animateMotion dur="2s" repeatCount="indefinite" path={edgePath} />
         </circle>
       )}
     </>
@@ -103,10 +111,12 @@ const edgeTypes: EdgeTypes = {
 function MessageNode({ data }: NodeProps<Node<MessageNodeData>>) {
   const [hovered, setHovered] = useState(false);
   const [showBranchInput, setShowBranchInput] = useState(false);
+  const [showNoBranchToast, setShowNoBranchToast] = useState(false);
   const [branchName, setBranchName] = useState("");
+  const [branchError, setBranchError] = useState("");
 
   const isUser = data.role === "user";
-  const hasBranch = data.branches.length > 0;
+  const branchColor = data.branchColor;
 
   function formatTime(dateStr: string) {
     return new Date(dateStr).toLocaleTimeString([], {
@@ -120,30 +130,69 @@ function MessageNode({ data }: NodeProps<Node<MessageNodeData>>) {
       data.onCreateBranch(branchName.trim(), data.messageId);
       setShowBranchInput(false);
       setBranchName("");
+      setBranchError("");
     }
   }
+
+  function handleNodeBodyClick(e: React.MouseEvent) {
+    if (!data.hasBranch && !showBranchInput) {
+      e.stopPropagation();
+      setShowNoBranchToast(true);
+      setTimeout(() => setShowNoBranchToast(false), 2500);
+    }
+  }
+
+  // Determine border color: branch color for branched nodes, default otherwise
+  const borderColor = branchColor
+    ? branchColor
+    : data.isActive
+      ? "#3b82f6"
+      : hovered
+        ? "#71717a"
+        : "rgba(63,63,70,0.5)";
 
   return (
     <div
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => {
         setHovered(false);
-        if (!showBranchInput) setShowBranchInput(false);
+        if (!showBranchInput) {
+          setShowBranchInput(false);
+          setBranchError("");
+        }
       }}
-      className={`rounded-xl border px-3 py-2.5 text-xs transition-all duration-200 ${
+      onClick={handleNodeBodyClick}
+      className={`rounded-xl px-3 py-2.5 text-xs transition-all duration-200 relative ${
         data.isActive
-          ? "bg-zinc-800 border-blue-500 shadow-lg shadow-blue-500/20"
+          ? "bg-zinc-800 shadow-lg"
           : hovered
-            ? "bg-zinc-800/80 border-zinc-500 shadow-md shadow-zinc-800/50"
-            : "bg-zinc-900 border-zinc-700/50 opacity-50"
+            ? "bg-zinc-800/80 shadow-md shadow-zinc-800/50"
+            : "bg-zinc-900 opacity-50"
       } ${hovered ? "scale-[1.02]" : ""}`}
-      style={{ width: NODE_WIDTH, minHeight: NODE_HEIGHT }}
+      style={{
+        width: NODE_WIDTH,
+        minHeight: NODE_HEIGHT,
+        borderWidth: 2,
+        borderStyle: "solid",
+        borderColor,
+        boxShadow: branchColor
+          ? `0 0 12px ${branchColor}33`
+          : undefined,
+      }}
     >
       <Handle
         type="target"
         position={Position.Top}
         className="!bg-zinc-500 !w-2 !h-2 !border-0 !-top-1"
       />
+
+      {/* "Create a branch" toast popup */}
+      {showNoBranchToast && (
+        <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 bg-zinc-700 text-zinc-200 text-[10px] rounded-lg shadow-lg whitespace-nowrap border border-zinc-600 animate-fade-in">
+          Create a branch to view this message
+          <div className="absolute left-1/2 -translate-x-1/2 top-full w-2 h-2 bg-zinc-700 border-r border-b border-zinc-600 rotate-45 -mt-1" />
+        </div>
+      )}
 
       {/* Header row */}
       <div className="flex items-center gap-1.5 mb-1.5">
@@ -176,30 +225,38 @@ function MessageNode({ data }: NodeProps<Node<MessageNodeData>>) {
       </p>
 
       {/* Branch labels */}
-      {hasBranch && (
+      {data.hasBranch && (
         <div className="flex gap-1 mt-2 flex-wrap">
-          {data.branches.map((b) => (
-            <span
-              key={b.id}
-              className={`text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
-                b.leafMessageId === data.activeLeafId
-                  ? "bg-blue-600/30 text-blue-300 border border-blue-500/50"
-                  : "bg-zinc-800 text-zinc-500 border border-zinc-700"
-              }`}
-            >
-              {b.name}
-            </span>
-          ))}
+          {data.branches.map((b) => {
+            const bColor = stringToColor(b.name);
+            return (
+              <span
+                key={b.id}
+                className="text-[9px] px-1.5 py-0.5 rounded-full font-medium"
+                style={{
+                  backgroundColor: `${bColor}20`,
+                  color: bColor,
+                  borderWidth: 1,
+                  borderStyle: "solid",
+                  borderColor: `${bColor}50`,
+                }}
+              >
+                {b.name}
+              </span>
+            );
+          })}
         </div>
       )}
 
-      {/* Hover action: add branch button */}
-      {hovered && !showBranchInput && (
+      {/* Hover action: add branch button (only if no branch on this node) */}
+      {hovered && !showBranchInput && !data.hasBranch && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             setShowBranchInput(true);
             setBranchName("");
+            setBranchError("");
+            setShowNoBranchToast(false);
           }}
           className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1 text-[10px] text-zinc-400 hover:text-blue-300 bg-zinc-900/80 hover:bg-blue-900/20 border border-zinc-700 hover:border-blue-500/50 rounded-md transition-all"
         >
@@ -212,29 +269,37 @@ function MessageNode({ data }: NodeProps<Node<MessageNodeData>>) {
 
       {/* Branch name input */}
       {showBranchInput && (
-        <div
-          className="mt-2 flex gap-1"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <input
-            type="text"
-            value={branchName}
-            onChange={(e) => setBranchName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleCreateBranch();
-              if (e.key === "Escape") setShowBranchInput(false);
-            }}
-            placeholder="Branch name..."
-            className="flex-1 bg-zinc-950 text-zinc-100 text-[10px] border border-zinc-600 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            autoFocus
-          />
-          <button
-            onClick={handleCreateBranch}
-            disabled={!branchName.trim()}
-            className="px-2 py-1 text-[10px] bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 text-white rounded transition-colors"
-          >
-            Create
-          </button>
+        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex gap-1">
+            <input
+              type="text"
+              value={branchName}
+              onChange={(e) => {
+                setBranchName(e.target.value);
+                setBranchError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateBranch();
+                if (e.key === "Escape") {
+                  setShowBranchInput(false);
+                  setBranchError("");
+                }
+              }}
+              placeholder="Branch name..."
+              className="flex-1 bg-zinc-950 text-zinc-100 text-[10px] border border-zinc-600 rounded px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
+              autoFocus
+            />
+            <button
+              onClick={handleCreateBranch}
+              disabled={!branchName.trim()}
+              className="px-2 py-1 text-[10px] bg-blue-600 hover:bg-blue-700 disabled:bg-zinc-700 text-white rounded transition-colors"
+            >
+              Create
+            </button>
+          </div>
+          {branchError && (
+            <p className="text-[9px] text-red-400 mt-1">{branchError}</p>
+          )}
         </div>
       )}
 
@@ -253,10 +318,9 @@ const nodeTypes: NodeTypes = {
 
 // --- Dagre Layout ---
 
-function getLayoutedElements(
-  nodes: Node[],
-  edges: Edge[]
-): { nodes: Node[]; edges: Edge[] } {
+function getLayoutedPositions(
+  messages: ChatMessage[]
+): Map<string, { x: number; y: number }> {
   const g = new dagre.graphlib.Graph();
   g.setDefaultEdgeLabel(() => ({}));
   g.setGraph({
@@ -267,28 +331,28 @@ function getLayoutedElements(
     marginy: 30,
   });
 
-  nodes.forEach((node) => {
-    g.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
+  messages.forEach((msg) => {
+    g.setNode(msg.id, { width: NODE_WIDTH, height: NODE_HEIGHT });
   });
 
-  edges.forEach((edge) => {
-    g.setEdge(edge.source, edge.target);
+  messages.forEach((msg) => {
+    if (msg.parentMessageId) {
+      g.setEdge(msg.parentMessageId, msg.id);
+    }
   });
 
   dagre.layout(g);
 
-  const layoutedNodes = nodes.map((node) => {
-    const dagreNode = g.node(node.id);
-    return {
-      ...node,
-      position: {
-        x: dagreNode.x - NODE_WIDTH / 2,
-        y: dagreNode.y - NODE_HEIGHT / 2,
-      },
-    };
+  const positions = new Map<string, { x: number; y: number }>();
+  messages.forEach((msg) => {
+    const n = g.node(msg.id);
+    positions.set(msg.id, {
+      x: n.x - NODE_WIDTH / 2,
+      y: n.y - NODE_HEIGHT / 2,
+    });
   });
 
-  return { nodes: layoutedNodes, edges };
+  return positions;
 }
 
 // --- Main Component ---
@@ -318,7 +382,6 @@ function GitGraphInner({
     return map;
   }, [branches]);
 
-  // Build a reverse lookup: messageId -> branch (if this message is a leaf of any branch)
   const branchForMessage = useMemo(() => {
     const map = new Map<string, Branch>();
     for (const b of branches) {
@@ -327,77 +390,91 @@ function GitGraphInner({
     return map;
   }, [branches]);
 
-  // Step 1: Layout (only recomputes when tree structure changes)
-  const layout = useMemo(() => {
-    const rawNodes: Node[] = allMessages.map((msg) => ({
-      id: msg.id,
-      type: "message",
-      position: { x: 0, y: 0 },
-      data: {} as MessageNodeData,
-    }));
+  // Compute dagre positions only when tree changes
+  const positions = useMemo(
+    () => getLayoutedPositions(allMessages),
+    [allMessages]
+  );
 
-    const rawEdges: Edge[] = allMessages
-      .filter((msg) => msg.parentMessageId)
-      .map((msg) => ({
-        id: `e-${msg.parentMessageId}-${msg.id}`,
-        source: msg.parentMessageId!,
-        target: msg.id,
-        type: "animated",
-      }));
-
-    return getLayoutedElements(rawNodes, rawEdges);
-  }, [allMessages]);
-
-  // Step 2: Apply data and styling (cheap)
   const messageMap = useMemo(() => {
     const map = new Map<string, ChatMessage>();
     for (const m of allMessages) map.set(m.id, m);
     return map;
   }, [allMessages]);
 
-  const nodes = useMemo(() => {
-    return layout.nodes.map((node) => {
-      const msg = messageMap.get(node.id)!;
+  // Build nodes
+  const nodes = useMemo((): Node<MessageNodeData>[] => {
+    return allMessages.map((msg) => {
+      const pos = positions.get(msg.id) || { x: 0, y: 0 };
+      const msgBranches = branchByLeaf.get(msg.id) || [];
+      const hasBranch = msgBranches.length > 0;
+      // Only the node with the branch gets the color, not the path
+      const branchColor = hasBranch ? stringToColor(msgBranches[0].name) : null;
+
       return {
-        ...node,
+        id: msg.id,
+        type: "message",
+        position: pos,
         data: {
           role: msg.role,
           content: msg.content,
           model: msg.model,
           createdAt: msg.createdAt,
           isActive: activePathIds.has(msg.id),
-          branches: branchByLeaf.get(msg.id) || [],
+          hasBranch,
+          branchColor,
+          branches: msgBranches,
           activeLeafId,
           onSelectBranch,
           onCreateBranch,
           messageId: msg.id,
-        } satisfies MessageNodeData,
-      };
-    });
-  }, [layout.nodes, messageMap, activePathIds, branchByLeaf, activeLeafId, onSelectBranch, onCreateBranch]);
-
-  const edges = useMemo(() => {
-    return layout.edges.map((edge) => {
-      const isActive = activePathIds.has(edge.target);
-      return {
-        ...edge,
-        data: { isActive },
-        style: {
-          stroke: isActive ? "#3b82f6" : "#3f3f46",
-          strokeWidth: isActive ? 2.5 : 1.5,
         },
       };
     });
-  }, [layout.edges, activePathIds]);
+  }, [allMessages, positions, activePathIds, branchByLeaf, activeLeafId, onSelectBranch, onCreateBranch]);
+
+  // Find the color of the currently selected branch
+  const activeBranchColor = useMemo(() => {
+    if (!activeLeafId) return null;
+    const branch = branches.find((b) => b.leafMessageId === activeLeafId);
+    return branch ? stringToColor(branch.name) : null;
+  }, [activeLeafId, branches]);
+
+  // Build edges — only color the active path with the selected branch's color
+  const edges = useMemo((): Edge[] => {
+    return allMessages
+      .filter((msg) => msg.parentMessageId)
+      .map((msg) => {
+        const isActive = activePathIds.has(msg.id);
+        const edgeColor = isActive && activeBranchColor
+          ? activeBranchColor
+          : "#3f3f46";
+
+        return {
+          id: `e-${msg.parentMessageId}-${msg.id}`,
+          source: msg.parentMessageId!,
+          target: msg.id,
+          type: "animated",
+          data: {
+            isActive,
+            color: isActive && activeBranchColor ? activeBranchColor : "#3b82f6",
+          },
+          style: {
+            stroke: edgeColor,
+            strokeWidth: isActive ? 2.5 : 1.5,
+          },
+        };
+      });
+  }, [allMessages, activePathIds, branchByLeaf]);
 
   // Fit view when node count changes
   useEffect(() => {
     if (nodes.length > 0) {
       setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
     }
-  }, [nodes.length, fitView]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allMessages.length, fitView]);
 
-  // On node click: if the node has a branch, switch to it. Otherwise just scroll right pane.
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
       const branch = branchForMessage.get(node.id);
@@ -446,22 +523,30 @@ export function GitGraphPane(props: GitGraphPaneProps) {
         </h3>
       </div>
 
-      {/* Branch pills */}
+      {/* Branch pills — colored by name */}
       {props.branches.length > 0 && (
         <div className="px-3 py-2 border-b border-zinc-800 flex flex-wrap gap-1.5 flex-shrink-0">
-          {props.branches.map((branch) => (
-            <button
-              key={branch.id}
-              onClick={() => props.onSelectBranch(branch)}
-              className={`px-2.5 py-1 text-xs rounded-full border transition-all duration-200 ${
-                branch.leafMessageId === props.activeLeafId
-                  ? "bg-blue-600/30 border-blue-500 text-blue-300 shadow-sm shadow-blue-500/20"
-                  : "bg-zinc-800/50 border-zinc-700 text-zinc-400 hover:border-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              {branch.name}
-            </button>
-          ))}
+          {props.branches.map((branch) => {
+            const color = stringToColor(branch.name);
+            const isActive = branch.leafMessageId === props.activeLeafId;
+            return (
+              <button
+                key={branch.id}
+                onClick={() => props.onSelectBranch(branch)}
+                className="px-2.5 py-1 text-xs rounded-full transition-all duration-200"
+                style={{
+                  backgroundColor: isActive ? `${color}30` : "rgba(39,39,42,0.5)",
+                  borderWidth: 1,
+                  borderStyle: "solid",
+                  borderColor: isActive ? color : "#3f3f46",
+                  color: isActive ? color : "#a1a1aa",
+                  boxShadow: isActive ? `0 0 8px ${color}33` : undefined,
+                }}
+              >
+                {branch.name}
+              </button>
+            );
+          })}
         </div>
       )}
 
