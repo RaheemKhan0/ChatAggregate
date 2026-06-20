@@ -18,6 +18,22 @@ export async function GET(
     include: {
       messages: {
         orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          parentMessageId: true,
+          role: true,
+          content: true,
+          model: true,
+          createdAt: true,
+        },
+      },
+      branches: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          name: true,
+          leafMessageId: true,
+        },
       },
     },
   });

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { createProvider, parseModelString } from "@/lib/llm/registry";
 import { decrypt } from "@/lib/crypto";
+import { getMessagePath, getActiveLeafId } from "@/lib/messages";
 import type { LLMMessage } from "@/lib/llm/types";
 
 export async function POST(req: Request) {
@@ -10,7 +11,7 @@ export async function POST(req: Request) {
     return new Response("Unauthorized", { status: 401 });
   }
 
-  const { conversationId, message, model } = await req.json();
+  const { conversationId, parentMessageId, message, model } = await req.json();
 
   if (!message || !model) {
     return new Response("Missing message or model", { status: 400 });
@@ -64,25 +65,35 @@ export async function POST(req: Request) {
     });
   }
 
+  // Determine the parent for the new user message
+  // If parentMessageId is provided, fork from that message
+  // Otherwise, append to the active leaf
+  let resolvedParentId: string | null = parentMessageId ?? null;
+  if (!resolvedParentId && convId) {
+    resolvedParentId = await getActiveLeafId(convId);
+  }
+
   // Save user message
-  await db.message.create({
+  const userMsg = await db.message.create({
     data: {
       conversationId: convId,
+      parentMessageId: resolvedParentId,
       role: "user",
       content: message,
     },
   });
 
-  // Load conversation history
-  const history = await db.message.findMany({
-    where: { conversationId: convId },
-    orderBy: { createdAt: "asc" },
-  });
+  // Build context by walking up the tree from the user message
+  const history = await getMessagePath(userMsg.id);
 
   const llmMessages: LLMMessage[] = history.map((m) => ({
     role: m.role as LLMMessage["role"],
     content: m.content,
   }));
+
+  // Log the request
+  console.log(`[Chat API] Provider: ${providerId} | Model: ${modelId} | User: ${session.user.email} | Messages: ${llmMessages.length} | Conversation: ${convId}`);
+  console.log(`[Chat API] Last message: "${message.slice(0, 100)}${message.length > 100 ? "..." : ""}"`);
 
   // Stream response
   const encoder = new TextEncoder();
@@ -93,7 +104,11 @@ export async function POST(req: Request) {
       try {
         controller.enqueue(
           encoder.encode(
-            `data: ${JSON.stringify({ type: "conversation_id", conversationId: convId })}\n\n`
+            `data: ${JSON.stringify({
+              type: "conversation_id",
+              conversationId: convId,
+              userMessageId: userMsg.id,
+            })}\n\n`
           )
         );
 
@@ -109,18 +124,30 @@ export async function POST(req: Request) {
           }
         }
 
-        // Save assistant message
-        await db.message.create({
+        // Save assistant message as child of the user message
+        const assistantMsg = await db.message.create({
           data: {
             conversationId: convId,
+            parentMessageId: userMsg.id,
             role: "assistant",
             content: fullResponse,
             model,
           },
         });
 
+        // Update the active leaf to the new assistant message
+        await db.conversation.update({
+          where: { id: convId },
+          data: { activeLeafId: assistantMsg.id },
+        });
+
         controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: "done" })}\n\n`)
+          encoder.encode(
+            `data: ${JSON.stringify({
+              type: "done",
+              assistantMessageId: assistantMsg.id,
+            })}\n\n`
+          )
         );
       } catch (error) {
         const errorMessage =
