@@ -20,6 +20,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 // CSS imported in globals.css
 import dagre from "dagre";
 import type { ChatMessage, Branch } from "@/types";
+import { getPathToMessage } from "@/lib/tree";
 
 // --- Deterministic color from string ---
 
@@ -60,6 +61,7 @@ interface MessageNodeData {
   activeLeafId: string | null;
   onSelectBranch: (branch: Branch) => void;
   onCreateBranch: (name: string, messageId: string) => void;
+  onFocusBranch: (branch: Branch) => void;
   messageId: string;
 }
 
@@ -142,7 +144,6 @@ function MessageNode({ data }: NodeProps<Node<MessageNodeData>>) {
     }
   }
 
-  // Determine border color: branch color for branched nodes, default otherwise
   const borderColor = branchColor
     ? branchColor
     : data.isActive
@@ -175,9 +176,7 @@ function MessageNode({ data }: NodeProps<Node<MessageNodeData>>) {
         borderWidth: 2,
         borderStyle: "solid",
         borderColor,
-        boxShadow: branchColor
-          ? `0 0 12px ${branchColor}33`
-          : undefined,
+        boxShadow: branchColor ? `0 0 12px ${branchColor}33` : undefined,
       }}
     >
       <Handle
@@ -186,7 +185,7 @@ function MessageNode({ data }: NodeProps<Node<MessageNodeData>>) {
         className="!bg-zinc-500 !w-2 !h-2 !border-0 !-top-1"
       />
 
-      {/* "Create a branch" toast popup */}
+      {/* Toast popup */}
       {showNoBranchToast && (
         <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 px-3 py-1.5 bg-zinc-700 text-zinc-200 text-[10px] rounded-lg shadow-lg whitespace-nowrap border border-zinc-600 animate-fade-in">
           Create a branch to view this message
@@ -248,23 +247,44 @@ function MessageNode({ data }: NodeProps<Node<MessageNodeData>>) {
         </div>
       )}
 
-      {/* Hover action: add branch button (only if no branch on this node) */}
-      {hovered && !showBranchInput && !data.hasBranch && (
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowBranchInput(true);
-            setBranchName("");
-            setBranchError("");
-            setShowNoBranchToast(false);
-          }}
-          className="mt-2 w-full flex items-center justify-center gap-1 px-2 py-1 text-[10px] text-zinc-400 hover:text-blue-300 bg-zinc-900/80 hover:bg-blue-900/20 border border-zinc-700 hover:border-blue-500/50 rounded-md transition-all"
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Branch
-        </button>
+      {/* Hover actions */}
+      {hovered && !showBranchInput && (
+        <div className="flex gap-1 mt-2">
+          {/* Focus button — only for branched nodes */}
+          {data.hasBranch && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                data.onFocusBranch(data.branches[0]);
+              }}
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] text-zinc-400 hover:text-blue-300 bg-zinc-900/80 hover:bg-blue-900/20 border border-zinc-700 hover:border-blue-500/50 rounded-md transition-all"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+              </svg>
+              Focus
+            </button>
+          )}
+          {/* Add branch button — only for non-branched nodes */}
+          {!data.hasBranch && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowBranchInput(true);
+                setBranchName("");
+                setBranchError("");
+                setShowNoBranchToast(false);
+              }}
+              className="flex-1 flex items-center justify-center gap-1 px-2 py-1 text-[10px] text-zinc-400 hover:text-blue-300 bg-zinc-900/80 hover:bg-blue-900/20 border border-zinc-700 hover:border-blue-500/50 rounded-md transition-all"
+            >
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Add Branch
+            </button>
+          )}
+        </div>
       )}
 
       {/* Branch name input */}
@@ -367,6 +387,7 @@ function GitGraphInner({
   onNodeClick,
 }: GitGraphPaneProps) {
   const { fitView } = useReactFlow();
+  const [focusedBranch, setFocusedBranch] = useState<Branch | null>(null);
 
   const activePathIds = useMemo(
     () => new Set(activePath.map((m) => m.id)),
@@ -390,25 +411,35 @@ function GitGraphInner({
     return map;
   }, [branches]);
 
-  // Compute dagre positions only when tree changes
-  const positions = useMemo(
-    () => getLayoutedPositions(allMessages),
-    [allMessages]
-  );
+  // In focus mode, show the focused branch's path PLUS any new messages
+  // on the current active path (so the user sees messages they send live)
+  const visibleMessages = useMemo(() => {
+    if (!focusedBranch) return allMessages;
 
-  const messageMap = useMemo(() => {
-    const map = new Map<string, ChatMessage>();
-    for (const m of allMessages) map.set(m.id, m);
-    return map;
-  }, [allMessages]);
+    const branchPath = getPathToMessage(allMessages, focusedBranch.leafMessageId);
+    const branchPathIds = new Set(branchPath.map((m) => m.id));
+
+    // Also include active path messages (covers new messages sent while focused)
+    const combined = new Set(branchPathIds);
+    for (const m of activePath) {
+      combined.add(m.id);
+    }
+
+    return allMessages.filter((m) => combined.has(m.id));
+  }, [focusedBranch, allMessages, activePath]);
+
+  // Compute dagre positions for visible messages
+  const positions = useMemo(
+    () => getLayoutedPositions(visibleMessages),
+    [visibleMessages]
+  );
 
   // Build nodes
   const nodes = useMemo((): Node<MessageNodeData>[] => {
-    return allMessages.map((msg) => {
+    return visibleMessages.map((msg) => {
       const pos = positions.get(msg.id) || { x: 0, y: 0 };
       const msgBranches = branchByLeaf.get(msg.id) || [];
       const hasBranch = msgBranches.length > 0;
-      // Only the node with the branch gets the color, not the path
       const branchColor = hasBranch ? stringToColor(msgBranches[0].name) : null;
 
       return {
@@ -427,11 +458,12 @@ function GitGraphInner({
           activeLeafId,
           onSelectBranch,
           onCreateBranch,
+          onFocusBranch: setFocusedBranch,
           messageId: msg.id,
         },
       };
     });
-  }, [allMessages, positions, activePathIds, branchByLeaf, activeLeafId, onSelectBranch, onCreateBranch]);
+  }, [visibleMessages, positions, activePathIds, branchByLeaf, activeLeafId, onSelectBranch, onCreateBranch]);
 
   // Find the color of the currently selected branch
   const activeBranchColor = useMemo(() => {
@@ -440,10 +472,10 @@ function GitGraphInner({
     return branch ? stringToColor(branch.name) : null;
   }, [activeLeafId, branches]);
 
-  // Build edges — only color the active path with the selected branch's color
+  // Build edges
   const edges = useMemo((): Edge[] => {
-    return allMessages
-      .filter((msg) => msg.parentMessageId)
+    return visibleMessages
+      .filter((msg) => msg.parentMessageId && positions.has(msg.parentMessageId))
       .map((msg) => {
         const isActive = activePathIds.has(msg.id);
         const edgeColor = isActive && activeBranchColor
@@ -465,15 +497,14 @@ function GitGraphInner({
           },
         };
       });
-  }, [allMessages, activePathIds, branchByLeaf]);
+  }, [visibleMessages, positions, activePathIds, activeBranchColor]);
 
-  // Fit view when node count changes
+  // Fit view when visible nodes change
   useEffect(() => {
     if (nodes.length > 0) {
-      setTimeout(() => fitView({ padding: 0.2, duration: 300 }), 50);
+      setTimeout(() => fitView({ padding: 0.3, duration: 300 }), 50);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allMessages.length, fitView]);
+  }, [visibleMessages.length, focusedBranch, fitView]);
 
   const handleNodeClick = useCallback(
     (_: React.MouseEvent, node: Node) => {
@@ -486,28 +517,59 @@ function GitGraphInner({
     [onNodeClick, onSelectBranch, branchForMessage]
   );
 
+  const focusColor = focusedBranch ? stringToColor(focusedBranch.name) : null;
+
   return (
-    <ReactFlow
-      nodes={nodes}
-      edges={edges}
-      nodeTypes={nodeTypes}
-      edgeTypes={edgeTypes}
-      onNodeClick={handleNodeClick}
-      fitView
-      fitViewOptions={{ padding: 0.2 }}
-      minZoom={0.2}
-      maxZoom={2}
-      defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
-      proOptions={{ hideAttribution: true }}
-      nodesDraggable={false}
-      nodesConnectable={false}
-      elementsSelectable={true}
-      panOnDrag={true}
-      zoomOnScroll={true}
-      colorMode="dark"
-    >
-      <Background color="#27272a" gap={24} size={1.5} />
-    </ReactFlow>
+    <>
+      {/* Focus mode banner */}
+      {focusedBranch && (
+        <div
+          className="flex items-center justify-between px-3 py-2 border-b flex-shrink-0"
+          style={{
+            backgroundColor: `${focusColor}10`,
+            borderColor: `${focusColor}30`,
+          }}
+        >
+          <div className="flex items-center gap-2">
+            <svg className="w-3.5 h-3.5" style={{ color: focusColor! }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            </svg>
+            <span className="text-[11px] font-medium" style={{ color: focusColor! }}>
+              Focused: {focusedBranch.name}
+            </span>
+          </div>
+          <button
+            onClick={() => setFocusedBranch(null)}
+            className="text-[10px] px-2 py-0.5 rounded bg-zinc-800 text-zinc-400 hover:text-zinc-200 border border-zinc-700 hover:border-zinc-500 transition-colors"
+          >
+            Exit Focus
+          </button>
+        </div>
+      )}
+
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        onNodeClick={handleNodeClick}
+        fitView
+        fitViewOptions={{ padding: 0.3 }}
+        minZoom={0.2}
+        maxZoom={2}
+        defaultViewport={{ x: 0, y: 0, zoom: 0.7 }}
+        proOptions={{ hideAttribution: true }}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        panOnDrag={true}
+        zoomOnScroll={true}
+        colorMode="dark"
+      >
+        <Background color="#27272a" gap={24} size={1.5} />
+      </ReactFlow>
+    </>
   );
 }
 
@@ -523,7 +585,7 @@ export function GitGraphPane(props: GitGraphPaneProps) {
         </h3>
       </div>
 
-      {/* Branch pills — colored by name */}
+      {/* Branch pills */}
       {props.branches.length > 0 && (
         <div className="px-3 py-2 border-b border-zinc-800 flex flex-wrap gap-1.5 flex-shrink-0">
           {props.branches.map((branch) => {
