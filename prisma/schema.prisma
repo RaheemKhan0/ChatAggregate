@@ -70,27 +70,45 @@ model UserApiKey {
 }
 
 model Conversation {
-  id        String    @id @default(cuid())
-  title     String    @default("New Chat")
-  userId    String
-  model     String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages  Message[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id           String    @id @default(cuid())
+  title        String    @default("New Chat")
+  userId       String
+  model        String
+  activeLeafId String?
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages     Message[]
+  branches     Branch[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([userId, updatedAt(sort: Desc)])
 }
 
-model Message {
+model Branch {
   id             String       @id @default(cuid())
+  name           String
   conversationId String
-  role           String
-  content        String       @db.Text
-  model          String?
-  tokenCount     Int?
+  leafMessageId  String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   createdAt      DateTime     @default(now())
 
+  @@unique([conversationId, name])
+  @@index([conversationId])
+}
+
+model Message {
+  id              String       @id @default(cuid())
+  conversationId  String
+  parentMessageId String?
+  role            String
+  content         String       @db.Text
+  model           String?
+  tokenCount      Int?
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  parent          Message?     @relation("MessageTree", fields: [parentMessageId], references: [id])
+  children        Message[]    @relation("MessageTree")
+  createdAt       DateTime     @default(now())
+
   @@index([conversationId, createdAt])
+  @@index([parentMessageId])
 }
