@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getProvider, parseModelString } from "@/lib/llm/registry";
+import { createProvider, parseModelString } from "@/lib/llm/registry";
+import { decrypt } from "@/lib/crypto";
 import type { LLMMessage } from "@/lib/llm/types";
 
 export async function POST(req: Request) {
@@ -16,6 +17,26 @@ export async function POST(req: Request) {
   }
 
   const { providerId, modelId } = parseModelString(model);
+
+  // Get user's API key for this provider
+  const userKey = await db.userApiKey.findUnique({
+    where: {
+      userId_provider: {
+        userId: session.user.id,
+        provider: providerId,
+      },
+    },
+  });
+
+  if (!userKey) {
+    return new Response(
+      `No API key configured for ${providerId}. Add one in Settings.`,
+      { status: 400 }
+    );
+  }
+
+  const apiKey = decrypt(userKey.encryptedKey);
+  const provider = createProvider(providerId, apiKey);
 
   // Get or create conversation
   let convId = conversationId;
@@ -64,14 +85,12 @@ export async function POST(req: Request) {
   }));
 
   // Stream response
-  const provider = getProvider(providerId);
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
     async start(controller) {
       let fullResponse = "";
       try {
-        // Send conversationId first so the client knows it
         controller.enqueue(
           encoder.encode(
             `data: ${JSON.stringify({ type: "conversation_id", conversationId: convId })}\n\n`

@@ -3,21 +3,12 @@ import { OpenAIProvider } from "./openai-provider";
 import { GeminiProvider } from "./gemini-provider";
 import type { LLMProvider, ModelInfo } from "./types";
 
-const providers = new Map<string, LLMProvider>();
-
-function ensureInitialized() {
-  if (providers.size > 0) return;
-
-  if (process.env.ANTHROPIC_API_KEY) {
-    providers.set("anthropic", new AnthropicProvider(process.env.ANTHROPIC_API_KEY));
-  }
-  if (process.env.OPENAI_API_KEY) {
-    providers.set("openai", new OpenAIProvider(process.env.OPENAI_API_KEY));
-  }
-  if (process.env.GEMINI_API_KEY) {
-    providers.set("gemini", new GeminiProvider(process.env.GEMINI_API_KEY));
-  }
-}
+// All models across all providers (doesn't require keys)
+const ALL_MODELS: ModelInfo[] = [
+  ...new AnthropicProvider("").listModels(),
+  ...new OpenAIProvider("").listModels(),
+  ...new GeminiProvider("").listModels(),
+];
 
 export function parseModelString(modelString: string): {
   providerId: string;
@@ -27,18 +18,26 @@ export function parseModelString(modelString: string): {
   return { providerId, modelId: rest.join("/") };
 }
 
-export function getProvider(providerId: string): LLMProvider {
-  ensureInitialized();
-  const provider = providers.get(providerId);
-  if (!provider) {
-    throw new Error(
-      `Provider "${providerId}" not available. Check that its API key is configured.`
-    );
+// Create a provider instance with a specific API key
+export function createProvider(providerId: string, apiKey: string): LLMProvider {
+  switch (providerId) {
+    case "anthropic":
+      return new AnthropicProvider(apiKey);
+    case "openai":
+      return new OpenAIProvider(apiKey);
+    case "gemini":
+      return new GeminiProvider(apiKey);
+    default:
+      throw new Error(`Unknown provider: ${providerId}`);
   }
-  return provider;
 }
 
+// Returns all known models (for the model selector UI)
 export function getAllModels(): ModelInfo[] {
-  ensureInitialized();
-  return Array.from(providers.values()).flatMap((p) => p.listModels());
+  return ALL_MODELS;
+}
+
+// Returns models filtered to only providers the user has keys for
+export function getModelsForProviders(providerIds: string[]): ModelInfo[] {
+  return ALL_MODELS.filter((m) => providerIds.includes(m.providerId));
 }
