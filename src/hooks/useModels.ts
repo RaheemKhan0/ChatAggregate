@@ -9,8 +9,13 @@ export function useModels() {
 
   useEffect(() => {
     fetch("/api/models")
-      .then((res) => res.json())
-      .then((data) => setModels(data))
+      .then((res) => {
+        if (!res.ok) return [];
+        return res.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) setModels(data);
+      })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
