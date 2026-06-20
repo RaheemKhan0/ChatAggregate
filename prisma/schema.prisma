@@ -18,6 +18,7 @@ model User {
   accounts      Account[]
   sessions      Session[]
   conversations Conversation[]
+  projects      Project[]
   apiKeys       UserApiKey[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -69,13 +70,43 @@ model UserApiKey {
   @@unique([userId, provider])
 }
 
+model Project {
+  id            String         @id @default(cuid())
+  name          String
+  description   String?
+  notes         String?        @db.Text
+  userId        String
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  files         ProjectFile[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([userId, updatedAt(sort: Desc)])
+}
+
+model ProjectFile {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  type      String
+  size      Int
+  content   String   @db.Text
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([projectId])
+}
+
 model Conversation {
   id           String    @id @default(cuid())
   title        String    @default("New Chat")
   userId       String
   model        String
   activeLeafId String?
+  projectId    String?
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: SetNull)
   messages     Message[]
   branches     Branch[]
   createdAt    DateTime  @default(now())
