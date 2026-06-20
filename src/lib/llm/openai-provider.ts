@@ -50,6 +50,30 @@ export class OpenAIProvider implements LLMProvider {
   static listModels(): ModelInfo[] {
     return [
       {
+        id: "gpt-5.5",
+        name: "GPT-5.5",
+        providerId: "openai",
+        contextWindow: 256000,
+      },
+      {
+        id: "o3",
+        name: "o3",
+        providerId: "openai",
+        contextWindow: 200000,
+      },
+      {
+        id: "o3-mini",
+        name: "o3 Mini",
+        providerId: "openai",
+        contextWindow: 200000,
+      },
+      {
+        id: "o4-mini",
+        name: "o4 Mini",
+        providerId: "openai",
+        contextWindow: 200000,
+      },
+      {
         id: "gpt-4o",
         name: "GPT-4o",
         providerId: "openai",
@@ -58,12 +82,6 @@ export class OpenAIProvider implements LLMProvider {
       {
         id: "gpt-4o-mini",
         name: "GPT-4o Mini",
-        providerId: "openai",
-        contextWindow: 128000,
-      },
-      {
-        id: "gpt-4-turbo",
-        name: "GPT-4 Turbo",
         providerId: "openai",
         contextWindow: 128000,
       },
