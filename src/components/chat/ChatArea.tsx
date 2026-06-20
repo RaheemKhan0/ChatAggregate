@@ -11,9 +11,10 @@ import { GitGraphPane } from "./GitGraphPane";
 
 interface ChatAreaProps {
   conversationId?: string;
+  projectId?: string;
 }
 
-export function ChatArea({ conversationId }: ChatAreaProps) {
+export function ChatArea({ conversationId, projectId }: ChatAreaProps) {
   const {
     messages,
     allMessages,
@@ -32,7 +33,7 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
     createBranch,
     forkFrom,
     getSiblingInfo,
-  } = useChat(conversationId);
+  } = useChat(conversationId, projectId);
 
   const { refresh: refreshConversations } = useConversationsContext();
   const messagesScrollRef = useRef<HTMLDivElement>(null);
