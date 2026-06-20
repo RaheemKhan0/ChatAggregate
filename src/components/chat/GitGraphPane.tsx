@@ -58,7 +58,7 @@ function computeGraphLayout(
     }
   }
 
-  // Track which message was the FIRST child we processed for each parent
+  // Track which parent message has had their FIRST child processed, so that subsequent children can be assigned to new columns
   const firstChildProcessed = new Set<string>();
 
   const columnForMessage = new Map<string, number>();
@@ -111,10 +111,10 @@ function computeGraphLayout(
     // Snapshot active columns for SVG pass-through lines
     const activeColumns = new Set(occupiedColumns);
 
-    // If leaf, free the column
-    if (!hasChildren.has(msg.id)) {
-      occupiedColumns.delete(column);
-    }
+    // // If leaf, free the column
+    // if (!hasChildren.has(msg.id)) {
+    //   occupiedColumns.delete(column);
+    // }
 
     nodes.push({
       message: msg,
@@ -160,10 +160,14 @@ export function GitGraphPane({
     return map;
   }, [branches]);
 
+  console.log("All Messages", allMessages)
+
   const { nodes, maxColumns } = useMemo(
     () => computeGraphLayout(allMessages),
     [allMessages]
   );
+
+  console.log("Nodes, maxColumns:", nodes, maxColumns);
 
   const svgWidth = Math.max(COL_WIDTH, maxColumns * COL_WIDTH + 8);
 
