@@ -5,9 +5,9 @@ import type { LLMProvider, ModelInfo } from "./types";
 
 // All models across all providers (doesn't require keys)
 const ALL_MODELS: ModelInfo[] = [
-  ...new AnthropicProvider("").listModels(),
-  ...new OpenAIProvider("").listModels(),
-  ...new GeminiProvider("").listModels(),
+  ...AnthropicProvider.listModels(),
+  ...OpenAIProvider.listModels(),
+  ...GeminiProvider.listModels(),
 ];
 
 export function parseModelString(modelString: string): {

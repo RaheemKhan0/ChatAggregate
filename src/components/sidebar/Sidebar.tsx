@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { useConversations } from "@/hooks/useConversations";
+import { useConversationsContext } from "@/contexts/ConversationsContext";
 import { ConversationItem } from "./ConversationItem";
 
 interface SidebarProps {
@@ -14,7 +14,7 @@ interface SidebarProps {
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { conversations, loading, deleteConversation, renameConversation } =
-    useConversations();
+    useConversationsContext();
 
   const activeId = pathname?.startsWith("/chat/")
     ? pathname.split("/chat/")[1]

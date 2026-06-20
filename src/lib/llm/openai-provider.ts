@@ -47,24 +47,24 @@ export class OpenAIProvider implements LLMProvider {
     yield { type: "done" };
   }
 
-  listModels(): ModelInfo[] {
+  static listModels(): ModelInfo[] {
     return [
       {
         id: "gpt-4o",
         name: "GPT-4o",
-        providerId: this.providerId,
+        providerId: "openai",
         contextWindow: 128000,
       },
       {
         id: "gpt-4o-mini",
         name: "GPT-4o Mini",
-        providerId: this.providerId,
+        providerId: "openai",
         contextWindow: 128000,
       },
       {
         id: "gpt-4-turbo",
         name: "GPT-4 Turbo",
-        providerId: this.providerId,
+        providerId: "openai",
         contextWindow: 128000,
       },
     ];

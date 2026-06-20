@@ -47,24 +47,24 @@ export class AnthropicProvider implements LLMProvider {
     yield { type: "done" };
   }
 
-  listModels(): ModelInfo[] {
+  static listModels(): ModelInfo[] {
     return [
       {
         id: "claude-sonnet-4-20250514",
         name: "Claude Sonnet 4",
-        providerId: this.providerId,
+        providerId: "anthropic",
         contextWindow: 200000,
       },
       {
         id: "claude-haiku-4-20250414",
         name: "Claude Haiku 4",
-        providerId: this.providerId,
+        providerId: "anthropic",
         contextWindow: 200000,
       },
       {
         id: "claude-opus-4-20250918",
         name: "Claude Opus 4",
-        providerId: this.providerId,
+        providerId: "anthropic",
         contextWindow: 200000,
       },
     ];

@@ -2,10 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { useChat } from "@/hooks/useChat";
+import { useConversationsContext } from "@/contexts/ConversationsContext";
 import { MessageBubble } from "./MessageBubble";
 import { StreamingMessage } from "./StreamingMessage";
 import { ChatInput } from "./ChatInput";
-import { ModelSelector } from "./ModelSelector";
 
 interface ChatAreaProps {
   conversationId?: string;
@@ -23,13 +23,24 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
     loadConversation,
   } = useChat(conversationId);
 
+  const { refresh: refreshConversations } = useConversationsContext();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const wasStreaming = useRef(false);
 
   useEffect(() => {
     if (conversationId) {
       loadConversation(conversationId);
     }
   }, [conversationId, loadConversation]);
+
+  // Sync the sidebar once a send cycle finishes (covers new conversations
+  // appearing and title/order updates from the title-on-first-message logic).
+  useEffect(() => {
+    if (wasStreaming.current && !isStreaming) {
+      refreshConversations();
+    }
+    wasStreaming.current = isStreaming;
+  }, [isStreaming, refreshConversations]);
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -43,11 +54,6 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
       {/* Header */}
       <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-3">
         <h2 className="text-sm font-medium text-zinc-400">Chat</h2>
-        <ModelSelector
-          value={selectedModel}
-          onChange={setSelectedModel}
-          disabled={isStreaming}
-        />
       </div>
 
       {/* Messages */}
@@ -79,6 +85,8 @@ export function ChatArea({ conversationId }: ChatAreaProps) {
         onSend={sendMessage}
         onStop={stopStreaming}
         isStreaming={isStreaming}
+        selectedModel={selectedModel}
+        onModelChange={setSelectedModel}
       />
     </div>
   );
